@@ -1,0 +1,16 @@
+{
+  "name": "emerald-coop-wrapper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser wrapper for 2-player co-op Pokemon Emerald Legacy: mGBA WASM core, touch controls, and the bridge between the ROM mailbox and the relay socket.",
+  "scripts": {
+    "postinstall": "node tools/patch-mgba.mjs",
+    "patch": "node tools/patch-mgba.mjs",
+    "test": "node --test test/mailbox.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@thenick775/mgba-wasm": "^2.5.1"
+  }
+}

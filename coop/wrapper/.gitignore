@@ -1,0 +1,8 @@
+node_modules/
+*.orig
+
+# The repo root ignores *.js (.gitignore:40); wrapper sources are real source.
+!*.js
+!src/*.js
+!test/*.js
+!tools/*.mjs
