@@ -7,7 +7,8 @@
   "scripts": {
     "postinstall": "node tools/patch-mgba.mjs",
     "patch": "node tools/patch-mgba.mjs",
-    "test": "node --test test/mailbox.test.js test/bridge.test.js test/integration.test.js"
+    "test": "node --test test/mailbox.test.js test/bridge.test.js test/controls.test.js test/integration.test.js",
+    "build": "node tools/build.mjs"
   },
   "engines": {
     "node": ">=18"

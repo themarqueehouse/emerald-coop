@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover lets us paint under the notch; user-scalable=no plus
+     touch-action in CSS is what actually stops pinch-zoom and double-tap zoom
+     from fighting the controls. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- Add to Home Screen launches standalone: no address bar, nothing to scroll.
+     This is the only reliable way to get true full screen on an iPhone. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Emerald Co-op">
+<meta name="theme-color" content="#0b1410">
+<title>Emerald Co-op</title>
+<style>
+  :root {
+    --bg: #0b1410;
+    --panel: #121e18;
+    --edge: #24382d;
+    --ink: #e8f3ec;
+    --muted: #8fa89a;
+    --accent: #3fb984;
+    --warn: #e0a34a;
+    --bad: #d9534f;
+    --pad: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+           env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    /* dvh follows the real viewport as iOS shows and hides its bars, which
+       100vh does not — with vh the bottom of the controls sits off-screen. */
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;  /* kill pull-to-refresh */
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* No text selection or callout menus from a long press on a d-pad. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* The whole app surface. touch-action: none is the single most important
+     line on this page: without it the browser claims drags for scrolling and
+     the d-pad becomes unusable. */
+  #app {
+    position: fixed;
+    inset: 0;
+    touch-action: none;
+    display: grid;
+    place-items: center;
+  }
+
+  /* --- game surface ------------------------------------------------------ */
+
+  #stage {
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+  #stage.live { display: block; }
+
+  /* The GBA is 240x160 (3:2). Fit it to the screen without distortion and let
+     the controls sit on top. image-rendering: pixelated keeps it crisp rather
+     than smeared when upscaled. */
+  #screen {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 3 / 2;
+    width: auto;
+    height: auto;
+    display: block;
+    background: #000;
+    image-rendering: pixelated;
+  }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    padding: var(--pad);
+    touch-action: none;
+  }
+  #overlay svg { width: 100%; height: 100%; display: block; }
+
+  .ctl { fill: rgba(232, 243, 236, 0.10); stroke: rgba(232, 243, 236, 0.30); stroke-width: 0.004; }
+  .ctl.small { fill: rgba(232, 243, 236, 0.08); }
+  .ctl-label {
+    fill: rgba(232, 243, 236, 0.55);
+    font: 600 0.055px ui-sans-serif, system-ui, sans-serif;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+  .ctl-label.tiny { font-size: 0.034px; }
+
+  /* --- HUD --------------------------------------------------------------- */
+
+  #hud {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 11px;
+    background: rgba(11, 20, 16, 0.72);
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    font-size: 12px;
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+  }
+  #stage.live #hud { display: flex; }
+
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  #dot.ready { background: var(--accent); }
+  #dot.waiting { background: var(--warn); }
+  #dot.lost, #dot.fatal { background: var(--bad); }
+  #hud-label { white-space: nowrap; color: var(--muted); }
+  #hud-rtt { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  #hud button {
+    appearance: none;
+    border: 1px solid var(--edge);
+    background: transparent;
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 3px 9px;
+    font: inherit;
+    font-size: 11px;
+  }
+
+  /* --- setup ------------------------------------------------------------- */
+
+  #setup {
+    width: min(460px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+  }
+  #stage.live ~ #setup, #setup.hidden { display: none; }
+
+  h1 { margin: 0 0 2px; font-size: 19px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+
+  label { display: block; margin: 12px 0 4px; font-size: 12px; color: var(--muted); }
+  input[type="text"], input[type="url"], select {
+    width: 100%;
+    padding: 9px 10px;
+    background: #0d1813;
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    color: var(--ink);
+    font: inherit;
+    /* 16px avoids iOS auto-zooming the page when a field is focused. */
+    font-size: 16px;
+  }
+  input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; min-width: 0; }
+
+  #go {
+    width: 100%;
+    margin-top: 18px;
+    padding: 12px;
+    background: var(--accent);
+    color: #05120c;
+    border: 0;
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 650;
+    font-size: 15px;
+  }
+  #go:disabled { opacity: 0.45; }
+
+  .note {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #0d1813;
+    border-left: 2px solid var(--edge);
+    border-radius: 0 7px 7px 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  #log {
+    margin-top: 12px;
+    max-height: 132px;
+    overflow-y: auto;
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #log .err { color: var(--bad); }
+
+  /* Portrait hint: the overlay layout is designed for landscape. */
+  #rotate {
+    position: absolute;
+    inset: 0;
+    display: none;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    background: var(--bg);
+    color: var(--muted);
+    font-size: 14px;
+  }
+  @media (orientation: portrait) {
+    #stage.live #rotate { display: grid; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="stage">
+    <canvas id="screen" width="240" height="160"></canvas>
+    <div id="overlay"></div>
+    <div id="hud">
+      <span id="dot"></span>
+      <span id="hud-label">starting…</span>
+      <span id="hud-rtt"></span>
+      <button id="save-btn" type="button">Save file</button>
+    </div>
+    <div id="rotate"><div>Rotate your phone to landscape.</div></div>
+  </div>
+
+  <div id="setup">
+    <h1>Emerald Co-op</h1>
+    <p class="sub">Two players, one Hoenn. Both of you need the same session code.</p>
+
+    <label for="relay">Relay address</label>
+    <input id="relay" type="url" placeholder="wss://your-relay.example.com" autocomplete="off"
+           autocapitalize="off" spellcheck="false">
+
+    <div class="row">
+      <div>
+        <label for="code">Session code</label>
+        <input id="code" type="text" placeholder="HOENN" maxlength="12" autocomplete="off"
+               autocapitalize="characters" spellcheck="false">
+      </div>
+      <div>
+        <label for="slot">You are</label>
+        <select id="slot">
+          <option value="0">Player 1 (holds the save)</option>
+          <option value="1">Player 2</option>
+        </select>
+      </div>
+    </div>
+
+    <label for="rom">Co-op ROM (.gba)</label>
+    <input id="rom" type="file" accept=".gba">
+
+    <label for="sav">Save file (.sav, optional)</label>
+    <input id="sav" type="file" accept=".sav,.srm">
+
+    <button id="go" type="button" disabled>Start</button>
+
+    <div class="note">
+      <b>Player 1 holds the save.</b> Load your <code>.sav</code> on Player 1's
+      phone only. Use <b>Save file</b> in-game to pull a copy out — do that often,
+      and keep it somewhere safe.
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script type="module">
+import { CoopApp } from './app.js';
+import { DEFAULT_LAYOUT, BTN } from './controls.js';
+
+const $ = (id) => document.getElementById(id);
+const stage = $('stage'), setup = $('setup'), logEl = $('log');
+
+function log(msg, isErr = false) {
+  const line = document.createElement('div');
+  if (isErr) line.className = 'err';
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// --- draw the controls from the SAME layout the hit-testing uses -----------
+// Generating the graphics from DEFAULT_LAYOUT rather than hardcoding them in
+// markup means what you see can never drift from what responds to a touch.
+function renderControls(layout) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 1 1');
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  const circle = (cx, cy, r, cls) => {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
+    c.setAttribute('class', cls);
+    return c;
+  };
+  const text = (cx, cy, s, cls) => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', cx); t.setAttribute('y', cy);
+    t.setAttribute('class', cls); t.textContent = s;
+    return t;
+  };
+
+  const { cx, cy, r } = layout.dpad;
+  svg.appendChild(circle(cx, cy, r, 'ctl'));
+  // Cross arms, drawn as a hint only; the hit-testing is angular.
+  for (const [dx, dy, ch] of [[0,-1,'▲'],[0,1,'▼'],[-1,0,'◀'],[1,0,'▶']]) {
+    svg.appendChild(text(cx + dx * r * 0.62, cy + dy * r * 0.62, ch, 'ctl-label tiny'));
+  }
+
+  const LABELS = { [BTN.A]:'A', [BTN.B]:'B', [BTN.L]:'L', [BTN.R]:'R',
+                   [BTN.START]:'START', [BTN.SELECT]:'SELECT' };
+  for (const b of layout.buttons) {
+    const small = b.r < 0.06;
+    svg.appendChild(circle(b.cx, b.cy, b.r, small ? 'ctl small' : 'ctl'));
+    svg.appendChild(text(b.cx, b.cy, LABELS[b.id] ?? b.id,
+      small ? 'ctl-label tiny' : 'ctl-label'));
+  }
+
+  $('overlay').replaceChildren(svg);
+}
+renderControls(DEFAULT_LAYOUT);
+
+// --- setup validation ------------------------------------------------------
+const relay = $('relay'), code = $('code'), rom = $('rom'), sav = $('sav'), go = $('go');
+
+// Remember the boring fields so nobody retypes a relay URL on a phone keyboard.
+try {
+  relay.value = localStorage.getItem('coop.relay') || '';
+  code.value = localStorage.getItem('coop.code') || '';
+  const s = localStorage.getItem('coop.slot');
+  if (s === '0' || s === '1') $('slot').value = s;
+} catch { /* private mode; not important */ }
+
+const CODE_RE = /^[A-Z0-9]{4,12}$/;
+function validate() {
+  const ok = relay.value.trim() !== '' &&
+             CODE_RE.test(code.value.trim().toUpperCase()) &&
+             rom.files.length === 1;
+  go.disabled = !ok;
+}
+for (const el of [relay, code, rom]) el.addEventListener('input', validate);
+code.addEventListener('input', () => { code.value = code.value.toUpperCase(); });
+validate();
+
+// --- start -----------------------------------------------------------------
+const app = new CoopApp({
+  canvas: $('screen'),
+  overlay: $('overlay'),
+  onLog: (m) => log(m),
+  onStatus: (s) => {
+    if (s.fatal) {
+      $('dot').className = 'fatal';
+      $('hud-label').textContent = s.fatal;
+      return;
+    }
+    const cls = s.status === 2 ? 'ready' : s.status === 1 ? 'waiting' : s.status === 3 ? 'lost' : '';
+    $('dot').className = cls;
+    $('hud-label').textContent = s.label || '';
+    $('hud-rtt').textContent = s.rtt != null ? `${s.rtt}ms` : '';
+  },
+});
+
+go.addEventListener('click', async () => {
+  go.disabled = true;
+  const session = code.value.trim().toUpperCase();
+  const slot = Number($('slot').value);
+
+  try {
+    localStorage.setItem('coop.relay', relay.value.trim());
+    localStorage.setItem('coop.code', session);
+    localStorage.setItem('coop.slot', String(slot));
+  } catch { /* ignore */ }
+
+  stage.classList.add('live');
+
+  try {
+    await app.start({
+      romFile: rom.files[0],
+      saveFile: sav.files[0] || null,
+      relayUrl: relay.value.trim(),
+      session,
+      slot,
+    });
+    setup.classList.add('hidden');
+  } catch (err) {
+    // Keep the setup panel up with the log visible: every failure here is
+    // something the player can act on (wrong ROM, missing headers, bad URL).
+    stage.classList.remove('live');
+    log(err.message, true);
+    go.disabled = false;
+  }
+});
+
+$('save-btn').addEventListener('click', async () => {
+  try {
+    const blob = await app.exportSave();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'emerald-coop.sav';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (err) {
+    log(err.message, true);
+  }
+});
+
+// Flush the save when the page goes away, so a backgrounded tab that iOS kills
+// does not lose progress.
+window.addEventListener('pagehide', () => { app.stop(); });
+</script>
+</body>
+</html>
