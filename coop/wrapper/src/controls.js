@@ -38,19 +38,22 @@ export const MGBA_NAMES = {
 };
 
 /**
- * Default landscape layout. The d-pad sits left, face buttons right, shoulders
- * top, and Start/Select low-centre where a thumb will not meet them by
- * accident.
+ * Default landscape layout.
+ *
+ * Everything lives in the lower half, within thumb reach. On real hardware L
+ * and R sit on the back edge, which maps naturally to the top of a screen --
+ * but a thumb holding a phone in landscape cannot get there, so they go in the
+ * bottom corners instead. Nothing overlaps the top of the picture.
  */
 export const DEFAULT_LAYOUT = {
-  dpad: { cx: 0.16, cy: 0.68, r: 0.15 },
+  dpad: { cx: 0.16, cy: 0.66, r: 0.15 },
   buttons: [
-    { id: BTN.A, cx: 0.88, cy: 0.62, r: 0.072 },
-    { id: BTN.B, cx: 0.75, cy: 0.74, r: 0.072 },
-    { id: BTN.L, cx: 0.08, cy: 0.12, r: 0.062 },
-    { id: BTN.R, cx: 0.92, cy: 0.12, r: 0.062 },
-    { id: BTN.START, cx: 0.57, cy: 0.93, r: 0.05 },
-    { id: BTN.SELECT, cx: 0.43, cy: 0.93, r: 0.05 },
+    { id: BTN.A, cx: 0.88, cy: 0.6, r: 0.072 },
+    { id: BTN.B, cx: 0.75, cy: 0.72, r: 0.072 },
+    { id: BTN.L, cx: 0.06, cy: 0.94, r: 0.055 },
+    { id: BTN.R, cx: 0.94, cy: 0.94, r: 0.055 },
+    { id: BTN.START, cx: 0.57, cy: 0.94, r: 0.05 },
+    { id: BTN.SELECT, cx: 0.43, cy: 0.94, r: 0.05 },
   ],
 };
 

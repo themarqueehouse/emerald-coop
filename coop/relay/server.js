@@ -12,6 +12,7 @@
 // pacing is handled where it belongs: next to the code that consumes it. The
 // relay's only pacing duty is to not buffer without bound.
 
+const http = require('node:http');
 const { WebSocketServer } = require('ws');
 const proto = require('./protocol');
 
@@ -73,8 +74,33 @@ class Relay {
 
   listen() {
     return new Promise((resolve) => {
-      this.wss = new WebSocketServer({ port: this.port }, () => {
-        this.port = this.wss.address().port;
+      // A plain WebSocketServer answers an ordinary GET with a bare 400, which
+      // makes a live relay look broken in a browser and can read as unhealthy
+      // to a host's health check. Serving a tiny HTTP surface alongside the
+      // socket means "is it up?" has an answer you can see.
+      this.http = http.createServer((req, res) => {
+        if (req.url === '/healthz' || req.url === '/') {
+          const body = JSON.stringify({
+            ok: true,
+            service: 'emerald-coop-relay',
+            protocolVersion: proto.NET_PROTOCOL_VERSION,
+            ...this.stats(),
+          });
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          });
+          res.end(body);
+          return;
+        }
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('not found\n');
+      });
+
+      this.wss = new WebSocketServer({ server: this.http });
+
+      this.http.listen(this.port, () => {
+        this.port = this.http.address().port;
         this.log.info?.(`relay listening on :${this.port}`);
         resolve(this.port);
       });
@@ -95,8 +121,8 @@ class Relay {
       }
     }
     this.sessions.clear();
-    if (!this.wss) return;
-    await new Promise((resolve) => this.wss.close(resolve));
+    if (this.wss) await new Promise((resolve) => this.wss.close(resolve));
+    if (this.http) await new Promise((resolve) => this.http.close(resolve));
   }
 
   onConnection(ws) {
