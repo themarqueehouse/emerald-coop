@@ -1,0 +1,6 @@
+node_modules/
+
+# The repo root ignores *.js for its build tooling (.gitignore:40). The relay
+# is real source, so re-include it here.
+!*.js
+!test/*.js

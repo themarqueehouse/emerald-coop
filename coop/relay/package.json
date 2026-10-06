@@ -1,0 +1,17 @@
+{
+  "name": "emerald-coop-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Relay server for 2-player co-op Pokemon Emerald Legacy. Pairs two players into a session and forwards link frames between them.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/relay.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}
