@@ -162,15 +162,23 @@ export class Mailbox {
   }
 
   /**
-   * Drain everything the ROM has queued for transmission.
+   * Drain up to `max` commands the ROM has queued for transmission.
+   *
+   * The limit matters: the caller must be able to loop each drained frame back
+   * into its own inbox ring, and that ring is smaller than the number of
+   * frames this can return. Draining more than there is loopback room for
+   * means discarding frames the peer already has, which is a desync. Callers
+   * should pass the room they actually have.
+   *
+   * @param {number} [max] maximum frames to take; default is all of them
    * @returns {Uint8Array[]} zero or more 16-byte link commands, oldest first
    */
-  drainOutbox() {
+  drainOutbox(max = Infinity) {
     const head = this.view.getUint8(OFF.outHead);
     let tail = this.view.getUint8(OFF.outTail);
     const out = [];
 
-    while (tail !== head) {
+    while (tail !== head && out.length < max) {
       const base = OFF.out + (tail & RING_MASK) * CMD_BYTES;
       // Copy, don't alias: the ROM will reuse this slot, and a SharedArrayBuffer
       // view handed to the socket could be mutated mid-send.
