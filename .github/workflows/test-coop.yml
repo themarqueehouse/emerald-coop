@@ -39,6 +39,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # The integration suite starts the REAL relay in-process, and the relay
+      # resolves `ws` from its own node_modules — coop/wrapper/node_modules is
+      # not an ancestor of coop/relay/, so Node will not find it there. Without
+      # this step the suite dies with "Cannot find module 'ws'".
+      - run: npm ci || npm install
+        working-directory: coop/relay
       - run: npm ci || npm install
         working-directory: coop/wrapper
       - run: npm test
