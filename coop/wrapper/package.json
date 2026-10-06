@@ -7,10 +7,15 @@
   "scripts": {
     "postinstall": "node tools/patch-mgba.mjs",
     "patch": "node tools/patch-mgba.mjs",
-    "test": "node --test test/mailbox.test.js test/bridge.test.js"
+    "test": "node --test test/mailbox.test.js test/bridge.test.js test/integration.test.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@thenick775/mgba-wasm": "^2.5.1"
+  },
+  "devDependencies": {
+    "ws": "^8.22.0"
   }
 }
