@@ -25,6 +25,7 @@
 #include "battle.h"
 #include "link.h"
 #include "link_rfu.h"
+#include "net_link.h"
 #include "constants/rgb.h"
 #include "constants/trade.h"
 
@@ -1021,6 +1022,11 @@ static void UNUSED SendBerryBlenderNoSpaceForPokeblocks(void)
 
 u8 GetMultiplayerId(void)
 {
+    // In net mode there is no SIO multiplayer register to read an id from;
+    // the relay assigns it and the wrapper writes it into the mailbox.
+    if (gNetLinkActive)
+        return NetLink_GetMultiplayerId();
+
     if (gWirelessCommType == TRUE)
         return Rfu_GetMultiplayerId();
 
@@ -1786,6 +1792,18 @@ bool8 HandleLinkConnection(void)
 {
     bool32 main1Failed, main2Failed;
 
+    // Co-op net transport. Takes priority over both hardware paths: once the
+    // browser wrapper has identified itself there is no cable and no adapter
+    // to fall back to. LinkMain2 and everything above it is unchanged.
+    if (NetLink_HostSupportsCoop())
+    {
+        gLinkStatus = NetLinkMain1(&gShouldAdvanceLinkState, gSendCmd, gRecvCmds);
+        LinkMain2(&gMain.heldKeys);
+        if ((gLinkStatus & LINK_STAT_RECEIVED_NOTHING) && IsSendingKeysOverCable() == TRUE)
+            return TRUE;
+        return FALSE;
+    }
+
     if (gWirelessCommType == 0)
     {
         gLinkStatus = LinkMain1(&gShouldAdvanceLinkState, gSendCmd, gRecvCmds);
@@ -1828,6 +1846,9 @@ void SetWirelessCommType0(void)
 
 u32 GetLinkRecvQueueLength(void)
 {
+    if (gNetLinkActive)
+        return NetLink_GetRecvQueueLength();
+
     if (gWirelessCommType != 0)
         return GetRfuRecvQueueLength();
 
