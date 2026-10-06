@@ -199,8 +199,28 @@
   }
   .note b { color: var(--ink); font-weight: 600; }
 
+  /* During setup the log sits under the panel; once the game is running it
+     becomes a floating overlay toggled from the HUD. */
+  #logwrap {
+    width: min(460px, calc(100vw - 32px));
+    margin-top: 10px;
+  }
+  #stage.live ~ #logwrap {
+    position: absolute;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 9px 12px;
+    background: rgba(11, 20, 16, 0.9);
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    backdrop-filter: blur(6px);
+    display: none;
+  }
+  #stage.live ~ #logwrap.open { display: block; }
+
   #log {
-    margin-top: 12px;
     max-height: 132px;
     overflow-y: auto;
     font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -237,10 +257,16 @@
       <span id="dot"></span>
       <span id="hud-label">starting…</span>
       <span id="hud-rtt"></span>
+      <button id="log-btn" type="button">Log</button>
       <button id="save-btn" type="button">Save file</button>
     </div>
     <div id="rotate"><div>Rotate your phone to landscape.</div></div>
   </div>
+
+  <!-- The log lives outside #setup so it survives a successful start. It is
+       the only diagnostic available on a phone, where there is no console to
+       open, so hiding it the moment things start working was exactly backwards. -->
+  <div id="logwrap"><div id="log"></div></div>
 
   <div id="setup">
     <h1>Emerald Co-op</h1>
@@ -279,7 +305,6 @@
       and keep it somewhere safe.
     </div>
 
-    <div id="log"></div>
   </div>
 
 </div>
@@ -410,6 +435,13 @@ go.addEventListener('click', async () => {
     log(err.message, true);
     go.disabled = false;
   }
+});
+
+$('log-btn').addEventListener('click', () => {
+  // On a phone there is no console, so this is the only way to read what the
+  // session is doing. Keep it reachable at all times, not just before start.
+  $('logwrap').classList.toggle('open');
+  logEl.scrollTop = logEl.scrollHeight;
 });
 
 $('save-btn').addEventListener('click', async () => {
