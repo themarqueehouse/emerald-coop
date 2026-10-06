@@ -1,0 +1,65 @@
+name: Test co-op relay and wrapper
+
+# Runs the JS suites on every change to coop/. Cheap, fast, and it is the
+# safety net for the two desync classes that are easy to reintroduce:
+# draining more frames than there is loopback room for, and the ESM wire codec
+# drifting away from the relay's CommonJS one.
+
+on:
+  push:
+    paths:
+      - 'coop/**'
+      - '.github/workflows/test-coop.yml'
+  pull_request:
+    paths:
+      - 'coop/**'
+  workflow_dispatch:
+
+jobs:
+  relay:
+    name: Relay (22 tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+        working-directory: coop/relay
+      - run: npm test
+        working-directory: coop/relay
+
+  wrapper:
+    name: Wrapper (74 tests) and site build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci || npm install
+        working-directory: coop/wrapper
+      - run: npm test
+        working-directory: coop/wrapper
+      # The build verifies its own import graph, which is the only thing
+      # standing in for a bundler. A broken relative path would otherwise show
+      # up on a phone as a blank screen.
+      - run: npm run build
+        working-directory: coop/wrapper
+      - name: Check the headers file shipped
+        run: |
+          test -f coop/wrapper/dist/_headers || {
+            echo "::error::dist/_headers missing; the emulator will not start without COOP/COEP"
+            exit 1
+          }
+          grep -q 'Cross-Origin-Embedder-Policy: require-corp' coop/wrapper/dist/_headers
+          grep -q 'Cross-Origin-Opener-Policy: same-origin' coop/wrapper/dist/_headers
+          echo "cross-origin isolation headers present"
+      - name: Upload built site
+        uses: actions/upload-artifact@v4
+        with:
+          name: coop-wrapper-site
+          path: coop/wrapper/dist
+          retention-days: 14

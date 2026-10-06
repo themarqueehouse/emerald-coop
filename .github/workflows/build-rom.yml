@@ -1,0 +1,87 @@
+name: Build co-op ROM
+
+# Builds the ROM in the cloud so it can be produced and downloaded from a
+# phone, with no local toolchain. Run it from the Actions tab (or the GitHub
+# mobile app) and download the artifact when it finishes.
+#
+# No base ROM is involved: the decomp builds from assets in the repo.
+
+on:
+  push:
+    branches: [coop-netplay, main]
+    paths-ignore:
+      - 'coop/**'
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - 'coop/**'
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+  rom:
+    name: Build pokeemerald_modern.gba
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Makefile falls back to system arm-none-eabi-* binaries when
+      # $DEVKITARM is unset, so the Debian cross toolchain is enough and is
+      # far quicker to install than devkitPro.
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            binutils-arm-none-eabi \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libpng-dev \
+            build-essential
+
+      - name: Build host tools
+        run: make tools -j"$(nproc)"
+
+      - name: Build ROM
+        run: make modern -j"$(nproc)"
+
+      # The mailbox address moves on every rebuild, so the wrapper must be told
+      # where it landed. Shipping it next to the ROM keeps the pair in sync.
+      - name: Emit co-op config
+        run: python3 tools/coop/emit_config.py pokeemerald_modern.map coop-config.json
+
+      - name: Report build budget
+        run: |
+          echo "### Build budget" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -A 4 'Memory region' pokeemerald_modern.map | head -5 \
+            >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Mailbox: $(python3 -c "import json;print(json.load(open('coop-config.json'))['mailboxAddressHex'])")" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      # Fail loudly if the co-op transport did not actually link in: a ROM that
+      # builds but has no mailbox would look fine and then never connect.
+      - name: Verify the co-op mailbox linked in
+        run: |
+          if ! grep -q 'gNetMailbox' pokeemerald_modern.map; then
+            echo "::error::gNetMailbox is absent from the linker map."
+            echo "::error::src/net_link.c did not compile in; this is not a co-op build."
+            exit 1
+          fi
+          echo "gNetMailbox present:"
+          grep -E '0x[0-9a-f]+\s+gNetMailbox' pokeemerald_modern.map | head -1
+
+      - name: Upload ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: emerald-coop-rom
+          path: |
+            pokeemerald_modern.gba
+            coop-config.json
+          # Artifacts cost storage and the ROM is 16MB; a fortnight is plenty
+          # to download it to a phone.
+          retention-days: 14
+          if-no-files-found: error
