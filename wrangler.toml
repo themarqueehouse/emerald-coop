@@ -1,0 +1,9 @@
+# Cloudflare Pages reads pages_build_output_dir from here, so the dashboard's
+# "Build output directory" field does not need finding or filling in.
+#
+# The build COMMAND still has to go in the dashboard for Pages:
+#   cd coop/wrapper && npm install && npm run build
+
+name = "emerald-coop"
+pages_build_output_dir = "coop/wrapper/dist"
+compatibility_date = "2026-10-06"

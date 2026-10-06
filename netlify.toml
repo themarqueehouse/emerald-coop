@@ -1,0 +1,28 @@
+# Netlify reads this, so nothing needs entering in the dashboard.
+#
+# The site lives in a subfolder, which is the only reason the hosted build
+# needs configuring at all. Putting it here rather than in a web form means it
+# is version-controlled and cannot be mistyped.
+
+[build]
+  command = "cd coop/wrapper && npm install && npm run build"
+  publish = "coop/wrapper/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Cross-origin isolation. The emulator core is a threaded WASM build, so
+# without these it cannot start: SharedArrayBuffer is withheld from pages that
+# are not isolated. coop/wrapper/dist/_headers sets the same thing; this is
+# belt and braces, and it also documents the requirement where a human will
+# actually look for it.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
