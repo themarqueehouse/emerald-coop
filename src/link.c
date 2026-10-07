@@ -400,6 +400,14 @@ void OpenLink(void)
 
 void CloseLink(void)
 {
+    // DisableSerial only touches SIO registers and gLink, neither of which the
+    // net transport uses, so without this a close leaves sNetState at
+    // CONN_ESTABLISHED with the rings still populated. A later OpenLink would
+    // then skip LINK_STATE_START0, never call NetLink_Reset, and deliver
+    // commands left over from the previous session as if they were live.
+    if (gNetLinkActive)
+        NetLink_Reset();
+
     gReceivedRemoteLinkPlayers = FALSE;
     if (gWirelessCommType)
         LinkRfu_Shutdown();

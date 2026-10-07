@@ -25,6 +25,7 @@
 #include "heal_location.h"
 #include "io_reg.h"
 #include "link.h"
+#include "net_link.h"
 #include "link_rfu.h"
 #include "load_save.h"
 #include "main.h"
@@ -2909,6 +2910,14 @@ bool32 IsSendingKeysOverCable(void)
 
 static u32 GetLinkSendQueueLength(void)
 {
+    // Must come first: on the net path gWirelessCommType is 0 and gLink is
+    // zeroed and never written, so this used to always answer 0. That left the
+    // send side completely unthrottled -- KeyInterCB_SelfIdle never asked the
+    // game to wait, and the ring overflowed under exactly the lag the throttle
+    // exists to absorb.
+    if (gNetLinkActive)
+        return NetLink_GetSendQueueLength();
+
     if (gWirelessCommType != 0)
         return gRfu.sendQueue.count;
     else

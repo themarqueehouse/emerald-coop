@@ -224,6 +224,14 @@ u32 NetLinkMain1(u8 *shouldAdvanceLinkState, u16 *sendCmd, u16 (*recvCmds)[CMD_L
     u8 playerCount;
     u32 retVal;
 
+    // Backpressure is a condition of THIS frame, not a permanent state. The
+    // cable transport gets away with latching it because gLink is re-zeroed
+    // whenever the port is re-enabled; nothing re-zeroes this. Left latched,
+    // a single ring overflow raises LINK_STAT_ERROR_QUEUE_FULL forever, and
+    // TrySetLinkErrorBuffer turns that into CB2_LinkError within one frame --
+    // so one burst of lag would permanently kill the session.
+    sNetQueueFull = QUEUE_FULL_NONE;
+
     // The handshake is the host's job, not ours: it owns the socket and knows
     // when the peer has joined. We only mirror its verdict into the state
     // machine the game is watching.
