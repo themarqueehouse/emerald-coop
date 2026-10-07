@@ -106,6 +106,11 @@ export class NetClient {
 
     ws.onclose = () => {
       this.stopPing();
+      // Tell the session layer we are down. Without this the UI keeps showing
+      // whatever it last knew -- a dropped phone sat there displaying "waiting
+      // for your partner" while not being connected to anything, which hid the
+      // real problem completely.
+      this.onSession({ status: 0 /* HOST_DOWN */, localId: this.localId, playerCount: 0 });
       this.onEvent({ type: 'socket-closed' });
       if (!this.closedByUs && !this.fatal) this.scheduleReconnect();
     };
