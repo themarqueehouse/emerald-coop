@@ -67,18 +67,19 @@
   }
   #stage.live { display: block; }
 
-  /* The GBA is 240x160 (3:2). Fit it to the screen without distortion and let
-     the controls sit on top. image-rendering: pixelated keeps it crisp rather
-     than smeared when upscaled. */
+  /* The GBA is 240x160 (3:2). The canvas has those as its pixel dimensions, so
+     `width: auto` would render it at 240 CSS px -- max-width only caps a size,
+     it never grows one. Fill the box instead and let object-fit letterbox it:
+     canvas is a replaced element, so object-fit applies and the aspect ratio
+     is preserved without hardcoding any arithmetic.
+     image-rendering: pixelated keeps it crisp rather than smeared when
+     upscaled, which at this magnification matters a lot. */
   #screen {
     position: absolute;
     inset: 0;
-    margin: auto;
-    max-width: 100%;
-    max-height: 100%;
-    aspect-ratio: 3 / 2;
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     display: block;
     background: #000;
     image-rendering: pixelated;
