@@ -26,6 +26,7 @@
 #include "io_reg.h"
 #include "link.h"
 #include "net_link.h"
+#include "coop.h"
 #include "link_rfu.h"
 #include "load_save.h"
 #include "main.h"
@@ -1469,6 +1470,10 @@ void CB1_Overworld(void)
 
 static void OverworldBasic(void)
 {
+    // Drives the co-op session: brings the link up once both players are
+    // present and keeps track of losing them. Runs before scripts so the rest
+    // of the frame sees a settled state.
+    Coop_Update();
     ScriptContext_RunScript();
     RunTasks();
     AnimateSprites();

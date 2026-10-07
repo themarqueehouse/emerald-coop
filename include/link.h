@@ -104,6 +104,9 @@
 #define LINKTYPE_EREADER_EM            0x5503
 #define LINKTYPE_CONTEST_GMODE         0x6601
 #define LINKTYPE_CONTEST_EMODE         0x6602
+// Co-op overworld. Both ROMs must agree on this before the player data
+// exchange, or it reports EXCHANGE_DIFF_SELECTIONS and tears the link down.
+#define LINKTYPE_COOP                  0x7701
 
 enum {
     BLOCK_REQ_SIZE_NONE, // Identical to 200
