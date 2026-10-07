@@ -86,7 +86,28 @@ struct NetMailbox
 
     /*0x10*/ struct NetFrame out[NET_RING_SLOTS];
     /*0x90*/ struct NetFrame in[NET_MAX_PLAYERS][NET_RING_SLOTS];
-}; // sizeof = 0x190
+
+    // Diagnostics. Written by the ROM, read by the wrapper and shown in its
+    // log. There is no console on a phone and no debugger on a GBA, so without
+    // this the only way to find out why co-op is not working is to guess.
+    /*0x190*/ volatile u8 coopState;        // enum CoopState
+    /*0x191*/ volatile u8 linkFlags;        // see COOP_DIAG_* below
+    /*0x192*/ volatile u16 posSent;         // position broadcasts sent
+    /*0x194*/ volatile u16 posRecv;         // position broadcasts received
+    /*0x196*/ volatile u16 peerMap;         // mapGroup | mapNum << 8, as last heard
+    /*0x198*/ volatile u16 peerX;
+    /*0x19A*/ volatile u16 peerY;
+    /*0x19C*/ volatile u16 selfMap;
+    /*0x19E*/ volatile u8 peerObjectId;     // OBJECT_EVENTS_COUNT when not spawned
+    /*0x19F*/ volatile u8 diagPad;
+}; // sizeof = 0x1A0
+
+// Bits in NetMailbox.linkFlags.
+#define COOP_DIAG_LINK_OPEN        (1 << 0) // gLinkStatus has CONN_ESTABLISHED
+#define COOP_DIAG_PLAYERS_RECEIVED (1 << 1) // gReceivedRemoteLinkPlayers
+#define COOP_DIAG_CALLBACK_ARMED   (1 << 2) // our position sender is installed
+#define COOP_DIAG_PEER_VALID       (1 << 3) // we have heard from the peer
+#define COOP_DIAG_PEER_SAME_MAP    (1 << 4) // ...and they are on our map
 
 extern struct NetMailbox gNetMailbox;
 

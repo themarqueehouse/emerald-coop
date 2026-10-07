@@ -42,6 +42,8 @@ export class CoopApp {
     this.heapBuffer = null;
     this.running = false;
     this.pumpErrors = 0;
+    this.diagTick = 0;
+    this.lastDiagLine = '';
   }
 
   log(msg) {
@@ -284,6 +286,10 @@ export class CoopApp {
       }
 
       this.bridge.pump();
+
+      // Every 30 frames: often enough to watch a handshake progress, rare
+      // enough not to cost anything.
+      if ((++this.diagTick & 31) === 0) this.logCoopDiagnostics();
     } catch (err) {
       // Throwing out of a core callback would tear down the emulator loop.
       this.pumpErrors++;
@@ -322,7 +328,14 @@ export class CoopApp {
   }
 
   readTouches(ev) {
-    const rect = this.overlay.getBoundingClientRect();
+    // Measure against the SVG, not the overlay. The overlay carries the
+    // safe-area insets as padding, so the controls are DRAWN inside the padding
+    // box while the overlay's own rect includes it -- the two disagree by the
+    // inset. On a phone in landscape that is a large offset on the notch side
+    // and at the home indicator, which is exactly where the d-pad and the
+    // bottom row sit.
+    const box = this.overlay.firstElementChild || this.overlay;
+    const rect = box.getBoundingClientRect();
     const points = [];
     for (const t of ev.touches) {
       points.push({
@@ -340,6 +353,37 @@ export class CoopApp {
   }
 
   // --- status and saves ----------------------------------------------------
+
+  /**
+   * Log what the ROM reports about the co-op session, but only when it
+   * changes. Polling this every frame would bury the log; a phone has no
+   * console, so the log has to stay readable.
+   */
+  logCoopDiagnostics() {
+    if (!this.mailbox) return;
+    let d;
+    try {
+      d = this.mailbox.diagnostics();
+    } catch {
+      return; // heap moved mid-read; next frame will do
+    }
+
+    const line =
+      `coop: ${d.state}` +
+      ` link=${d.linkOpen ? 'y' : 'n'}` +
+      ` players=${d.playersReceived ? 'y' : 'n'}` +
+      ` sender=${d.callbackArmed ? 'y' : 'n'}` +
+      ` sent=${d.posSent} recv=${d.posRecv}` +
+      ` map=${d.selfMap} peerMap=${d.peerMap}` +
+      ` peer=${d.peerValid ? d.peerAt : 'none'}` +
+      ` sameMap=${d.peerSameMap ? 'y' : 'n'}` +
+      ` drawn=${d.spawned ? 'y' : 'n'}`;
+
+    if (line !== this.lastDiagLine) {
+      this.lastDiagLine = line;
+      this.log(line);
+    }
+  }
 
   publishStatus() {
     if (!this.bridge) {

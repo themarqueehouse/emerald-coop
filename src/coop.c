@@ -15,6 +15,9 @@
 
 EWRAM_DATA struct CoopPeer gCoopPeer = {0};
 static EWRAM_DATA u8 sCoopState = 0;
+// Defined with the sprite code below; declared here so the diagnostics can
+// report whether the partner is currently spawned.
+static EWRAM_DATA u8 sPeerObjectId;
 static EWRAM_DATA u16 sStateTimer = 0;
 
 // The player data exchange normally gets 600 frames (10s) before the cable
@@ -52,11 +55,33 @@ void Coop_Reset(void)
 }
 
 static void CoopSendPositionCB(void);
+static bool8 PeerIsOnOurMap(void);
+static void PublishDiagnostics(void);
 
 static void EnterState(u8 state)
 {
     sCoopState = state;
     sStateTimer = 0;
+}
+
+static void PublishDiagnostics(void)
+{
+    u8 flags = 0;
+
+    if (gLinkStatus & LINK_STAT_CONN_ESTABLISHED) flags |= COOP_DIAG_LINK_OPEN;
+    if (gReceivedRemoteLinkPlayers)               flags |= COOP_DIAG_PLAYERS_RECEIVED;
+    if (gLinkCallback == CoopSendPositionCB)      flags |= COOP_DIAG_CALLBACK_ARMED;
+    if (gCoopPeer.valid)                          flags |= COOP_DIAG_PEER_VALID;
+    if (PeerIsOnOurMap())                         flags |= COOP_DIAG_PEER_SAME_MAP;
+
+    gNetMailbox.coopState = sCoopState;
+    gNetMailbox.linkFlags = flags;
+    gNetMailbox.peerMap = gCoopPeer.mapGroup | ((u16)gCoopPeer.mapNum << 8);
+    gNetMailbox.peerX = gCoopPeer.x;
+    gNetMailbox.peerY = gCoopPeer.y;
+    gNetMailbox.selfMap = gSaveBlock1Ptr->location.mapGroup
+                        | ((u16)gSaveBlock1Ptr->location.mapNum << 8);
+    gNetMailbox.peerObjectId = sPeerObjectId;
 }
 
 void Coop_Update(void)
@@ -149,6 +174,8 @@ void Coop_Update(void)
         }
         break;
     }
+
+    PublishDiagnostics();
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +193,6 @@ void Coop_Update(void)
 #define COOP_PEER_LOCAL_ID 0xF0
 
 // Object-event slot the partner currently occupies, or OBJECT_EVENTS_COUNT.
-static EWRAM_DATA u8 sPeerObjectId = 0;
 static EWRAM_DATA u16 sFrameCounter = 0;
 
 /**
@@ -214,6 +240,8 @@ static void CoopSendPositionCB(void)
     // animation and standing still, which is what stops a partner who is
     // simply standing there from twitching.
     gSendCmd[5] = (me->heldMovementActive && !me->heldMovementFinished) ? 1 : 0;
+
+    gNetMailbox.posSent++;
 }
 
 void Coop_ReceivePosition(u8 playerId, const u16 *cmd)
@@ -234,6 +262,8 @@ void Coop_ReceivePosition(u8 playerId, const u16 *cmd)
     gCoopPeer.moving = cmd[5] & 1;
     gCoopPeer.lastSeenFrame = sFrameCounter;
     gCoopPeer.valid = TRUE;
+
+    gNetMailbox.posRecv++;
 }
 
 static bool8 PeerIsOnOurMap(void)

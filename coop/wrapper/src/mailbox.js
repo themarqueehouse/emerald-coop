@@ -13,7 +13,7 @@ export const CMD_LENGTH = 8;
 export const CMD_BYTES = CMD_LENGTH * 2; // 16
 export const RING_SLOTS = 8;
 export const RING_MASK = RING_SLOTS - 1;
-export const MAILBOX_SIZE = 0x190; // 400
+export const MAILBOX_SIZE = 0x1a0; // 416
 
 // Byte offsets within the mailbox. Mirrors struct NetMailbox.
 export const OFF = {
@@ -29,6 +29,27 @@ export const OFF = {
   heartbeat: 0x0e,
   out: 0x10, // NetFrame[RING_SLOTS]
   in: 0x90, // NetFrame[MAX_PLAYERS][RING_SLOTS]
+  // Diagnostics written by the ROM. There is no console on a phone and no
+  // debugger on a GBA, so this is the only way to see why co-op is not working.
+  coopState: 0x190,
+  linkFlags: 0x191,
+  posSent: 0x192,
+  posRecv: 0x194,
+  peerMap: 0x196,
+  peerX: 0x198,
+  peerY: 0x19a,
+  selfMap: 0x19c,
+  peerObjectId: 0x19e,
+};
+
+export const COOP_STATE_NAMES = ['off', 'opening', 'exchanging', 'ACTIVE', 'lost'];
+
+export const DIAG = {
+  LINK_OPEN: 1 << 0,
+  PLAYERS_RECEIVED: 1 << 1,
+  CALLBACK_ARMED: 1 << 2,
+  PEER_VALID: 1 << 3,
+  PEER_SAME_MAP: 1 << 4,
 };
 
 // Mirrors enum NetHostStatus.
@@ -278,6 +299,27 @@ export class Mailbox {
       this.view.setUint8(OFF.inHead + i, 0);
       this.view.setUint8(OFF.inTail + i, 0);
     }
+  }
+
+  /** Everything the ROM reports about the co-op session. */
+  diagnostics() {
+    const v = this.view;
+    const flags = v.getUint8(OFF.linkFlags);
+    const mapStr = (m) => `${m & 0xff}.${(m >> 8) & 0xff}`;
+    return {
+      state: COOP_STATE_NAMES[v.getUint8(OFF.coopState)] ?? v.getUint8(OFF.coopState),
+      linkOpen: Boolean(flags & DIAG.LINK_OPEN),
+      playersReceived: Boolean(flags & DIAG.PLAYERS_RECEIVED),
+      callbackArmed: Boolean(flags & DIAG.CALLBACK_ARMED),
+      peerValid: Boolean(flags & DIAG.PEER_VALID),
+      peerSameMap: Boolean(flags & DIAG.PEER_SAME_MAP),
+      posSent: v.getUint16(OFF.posSent, true),
+      posRecv: v.getUint16(OFF.posRecv, true),
+      selfMap: mapStr(v.getUint16(OFF.selfMap, true)),
+      peerMap: mapStr(v.getUint16(OFF.peerMap, true)),
+      peerAt: `${v.getUint16(OFF.peerX, true)},${v.getUint16(OFF.peerY, true)}`,
+      spawned: v.getUint8(OFF.peerObjectId) < 16,
+    };
   }
 
   snapshot() {

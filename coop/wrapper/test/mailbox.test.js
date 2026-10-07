@@ -424,9 +424,11 @@ test('the mailbox never writes outside its own 400 bytes', () => {
 });
 
 test('the struct size matches the C layout', () => {
-  // in[] is the last member: MAX_PLAYERS * RING_SLOTS frames.
-  assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, MAILBOX_SIZE);
+  // in[] is followed by the diagnostics block, which ends the struct.
+  assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, OFF.coopState, 'in[] abuts diagnostics');
   assert.equal(OFF.out + RING_SLOTS * CMD_BYTES, OFF.in, 'out[] abuts in[]');
+  assert.equal(MAILBOX_SIZE, 0x1a0);
+  assert.ok(OFF.peerObjectId < MAILBOX_SIZE, 'diagnostics fit inside the struct');
 });
 
 // ---------------------------------------------------------------------------
@@ -510,5 +512,5 @@ test('the heartbeat is readable at the documented offset', () => {
 test('the heartbeat occupies former padding, so the struct size is unchanged', () => {
   assert.equal(OFF.heartbeat, 0x0e);
   assert.equal(OFF.out, 0x10, 'out[] still starts at 0x10');
-  assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, MAILBOX_SIZE);
+  assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, OFF.coopState);
 });
