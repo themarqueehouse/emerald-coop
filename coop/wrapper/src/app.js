@@ -74,6 +74,22 @@ export class CoopApp {
     this.core = await mGBA({ canvas: this.canvas });
     this.core.setLogger?.(() => {}); // mGBA's own log is noisy; we have our own
 
+    // Turn off everything that keeps a second copy of console memory.
+    //
+    // Save states and rewind snapshots each contain a full image of EWRAM --
+    // magic word included -- which is what made the mailbox scan find multiple
+    // candidates it could not tell apart. Restoring a save state would also
+    // reinstate a mailbox from a previous session mid-link, which is a desync
+    // waiting to happen.
+    //
+    // Co-op therefore uses ordinary in-game saving only: the real .sav, the
+    // way the cartridge did it.
+    this.core.setCoreSettings?.({
+      autoSaveStateEnable: false,
+      restoreAutoSaveStateOnLoad: false,
+      rewindEnable: false,
+    });
+
     await this.core.FSInit();
 
     this.log('loading ROM…');
@@ -112,7 +128,38 @@ export class CoopApp {
       },
     });
 
+    this.startSaveFlush();
     this.log('co-op active');
+  }
+
+  /**
+   * Flush the save to persistent storage on a timer.
+   *
+   * The emulator writes the .sav into a virtual filesystem that only reaches
+   * the phone's real storage on an explicit sync. iOS kills backgrounded web
+   * apps without warning and often without firing any teardown event, so
+   * syncing only on exit loses progress. A periodic flush bounds how much can
+   * ever be lost.
+   */
+  startSaveFlush({ everyMs = 30000 } = {}) {
+    this.stopSaveFlush();
+    this.saveTimer = setInterval(() => this.flushSave(), everyMs);
+  }
+
+  stopSaveFlush() {
+    if (this.saveTimer) clearInterval(this.saveTimer);
+    this.saveTimer = null;
+  }
+
+  async flushSave() {
+    if (!this.core || !this.running) return;
+    try {
+      await this.core.FSSync();
+    } catch (err) {
+      // Never fatal: a failed flush costs progress, a thrown error costs the
+      // session.
+      this.log(`save flush failed: ${err.message}`);
+    }
   }
 
   async findMailboxWithRetry({ attempts = 240 } = {}) {
@@ -264,7 +311,12 @@ export class CoopApp {
     // A backgrounded tab stops delivering touchend, which would leave a
     // direction stuck down. Release everything when we lose visibility.
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.applyInput(this.input.clear());
+      if (document.hidden) {
+        this.applyInput(this.input.clear());
+        // Going to the background is the last reliable moment before iOS may
+        // kill us outright, so get the save down now.
+        this.flushSave();
+      }
     });
     window.addEventListener('blur', () => this.applyInput(this.input.clear()));
   }
@@ -328,6 +380,7 @@ export class CoopApp {
   }
 
   async stop() {
+    this.stopSaveFlush();
     this.running = false;
     this.applyInput(this.input.clear());
     this.client?.close();

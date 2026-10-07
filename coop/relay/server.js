@@ -25,8 +25,12 @@ const MAX_BACKLOG_FRAMES = 60;
 // A client that sends nothing at all for this long is gone, whatever the socket
 // thinks. Mobile browsers suspend background tabs without closing sockets, so
 // this is the detection that actually fires in practice.
-const IDLE_TIMEOUT_MS = 15000;
-const HEARTBEAT_INTERVAL_MS = 5000;
+// 15s was far too twitchy for phones: a browser briefly suspending a
+// backgrounded tab is routine, and forcing a full rejoin for it made sessions
+// feel like they were dropping constantly. The client pings every 5s, so 45s
+// still catches a genuinely dead peer within three missed pings.
+const IDLE_TIMEOUT_MS = 45000;
+const HEARTBEAT_INTERVAL_MS = 10000;
 
 class Session {
   constructor(code) {
