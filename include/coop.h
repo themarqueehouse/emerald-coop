@@ -75,4 +75,13 @@ void Coop_Update(void);
 /** Reset everything; used when a session ends or the peer is lost. */
 void Coop_Reset(void);
 
+/** Unpack a position broadcast. Called from ProcessRecvCmds. */
+void Coop_ReceivePosition(u8 playerId, const u16 *cmd);
+
+/**
+ * Spawn, move or despawn the partner's sprite to match what we last heard.
+ * Called once per frame from the overworld, after the field has updated.
+ */
+void Coop_UpdatePeerSprite(void);
+
 #endif // GUARD_COOP_H

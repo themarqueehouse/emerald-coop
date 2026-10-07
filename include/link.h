@@ -73,6 +73,10 @@
 #define LINKCMD_INIT_BLOCK              0xBBBB
 #define LINKCMD_READY_CANCEL_TRADE      0xBBCC
 #define LINKCMD_SEND_HELD_KEYS          0xCAFE
+// Co-op overworld position broadcast, one per frame. 0x3333 is unused by the
+// cable protocol and does not collide with the RFU command space, which masks
+// on 0xFF00.
+#define LINKCMD_COOP_POS                0x3333
 #define LINKCMD_SEND_BLOCK_REQ          0xCCCC
 #define LINKCMD_START_TRADE             0xCCDD
 #define LINKCMD_CONFIRM_FINISH_TRADE    0xDCBA

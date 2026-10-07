@@ -26,6 +26,7 @@
 #include "link.h"
 #include "link_rfu.h"
 #include "net_link.h"
+#include "coop.h"
 #include "constants/rgb.h"
 #include "constants/trade.h"
 
@@ -646,6 +647,9 @@ static void ProcessRecvCmds(u8 unused)
                 break;
             case LINKCMD_SEND_BLOCK_REQ:
                 SendBlock(0, sBlockRequests[gRecvCmds[i][1]].address, sBlockRequests[gRecvCmds[i][1]].size);
+                break;
+            case LINKCMD_COOP_POS:
+                Coop_ReceivePosition(i, gRecvCmds[i]);
                 break;
             case LINKCMD_SEND_HELD_KEYS:
                 gLinkPartnersHeldKeys[i] = gRecvCmds[i][1];

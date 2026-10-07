@@ -1474,6 +1474,9 @@ static void OverworldBasic(void)
     // present and keeps track of losing them. Runs before scripts so the rest
     // of the frame sees a settled state.
     Coop_Update();
+    // After the state machine, so a session that just went active spawns the
+    // partner on the same frame rather than a frame late.
+    Coop_UpdatePeerSprite();
     ScriptContext_RunScript();
     RunTasks();
     AnimateSprites();
