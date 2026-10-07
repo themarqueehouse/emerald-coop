@@ -1,6 +1,7 @@
 #include "global.h"
 #include "link.h"
 #include "net_link.h"
+#include "coop.h"
 
 // ---------------------------------------------------------------------------
 // Co-op network transport. See include/net_link.h for the shape of the seam.
@@ -276,15 +277,27 @@ u32 NetLinkMain1(u8 *shouldAdvanceLinkState, u16 *sendCmd, u16 (*recvCmds)[CMD_L
     if (sNetReceivedNothing)
         retVal |= 1 << LINK_STAT_RECEIVED_NOTHING_SHIFT;
 
-    if (sNetQueueFull != QUEUE_FULL_NONE)
-        retVal |= (u32)sNetQueueFull << LINK_STAT_ERROR_QUEUE_FULL_SHIFT;
+    // Deliberately NOT reported. LINK_STAT_ERROR_QUEUE_FULL sits inside
+    // LINK_STAT_ERRORS, and TrySetLinkErrorBuffer throws the game to
+    // CB2_LinkError ("Communication error") on any error bit, on any frame.
+    //
+    // On a cable a full queue means something is genuinely broken. On a
+    // network it means one moment of lag -- which on mobile data is routine
+    // and entirely recoverable. Reporting it as an error turned normal jitter
+    // into a session-ending error screen.
+    //
+    // Backpressure still does its job: GetLinkSendQueueLength reports the real
+    // depth, so the overworld throttles the sender instead.
 
     if (sNetState == LINK_STATE_CONN_ESTABLISHED)
         retVal |= LINK_STAT_CONN_ESTABLISHED;
 
-    // A peer that vanishes mid-session surfaces as a hardware error, which is
-    // the one failure the game already knows how to report and recover from.
-    if (gNetLinkActive && status == NET_HOST_LOST)
+    // A vanished peer is only an error for activities that genuinely cannot
+    // continue without one -- a trade or a link battle. During co-op overworld
+    // play the session layer handles it: it closes the link cleanly and
+    // rebuilds when the peer returns. Throwing the game to an error screen
+    // there would cost unsaved progress over what is often a brief dropout.
+    if (gNetLinkActive && status == NET_HOST_LOST && !IsCoopLinkActive())
         retVal |= LINK_STAT_ERROR_HARDWARE;
 
     if (localId >= MAX_LINK_PLAYERS)
