@@ -14,7 +14,7 @@
 // tools/build.mjs verifies this path resolves, so it cannot rot silently.
 import mGBA from './vendor/mgba.js';
 
-import { Mailbox, findMailbox, findAllMailboxes, HOST_DOWN } from './mailbox.js';
+import { Mailbox, findAllMailboxes, pickLiveMailbox, HOST_DOWN } from './mailbox.js';
 import { Bridge, HOST_CONNECTING, HOST_READY, HOST_LOST } from './bridge.js';
 import { NetClient } from './netclient.js';
 import {
@@ -120,30 +120,59 @@ export class CoopApp {
       const buffer = this.core.coopHeapBuffer;
       if (buffer) {
         const found = findAllMailboxes(buffer);
+
         if (found.length === 1) {
-          this.heapBuffer = buffer;
-          this.mailbox = new Mailbox(buffer, found[0]);
-          this.log(`mailbox found at heap offset 0x${found[0].toString(16)}`);
+          this.adoptMailbox(buffer, found[0]);
           return;
         }
+
         if (found.length > 1) {
-          // Two candidates means something else in memory carries our magic.
-          // Guessing would corrupt a live session, so refuse.
-          throw new Error(
-            `found ${found.length} mailbox candidates at ${found
-              .map((o) => '0x' + o.toString(16))
-              .join(', ')} — cannot tell which is real`
-          );
+          // More than one copy of EWRAM carries our magic -- rewind snapshots
+          // and save states both contain a full image. Rather than guess,
+          // watch which one's heartbeat is ticking: only the live mailbox
+          // advances, because the ROM bumps it every VBlank from boot.
+          const live = await this.resolveLiveMailbox(buffer, found);
+          if (live !== null) {
+            this.adoptMailbox(this.core.coopHeapBuffer || buffer, live);
+            this.log(`resolved ${found.length} candidates by heartbeat`);
+            return;
+          }
+          // Not decidable yet; fall through and try again next pass. The
+          // emulator may still be on its first frames.
         }
       }
       await new Promise((r) => setTimeout(r, 25));
     }
 
     throw new Error(
-      'no co-op mailbox found in emulator memory. Either this is not a co-op ' +
-        'build of the ROM, or tools/patch-mgba.mjs has not been run against ' +
-        'the installed mgba-wasm.'
+      'no live co-op mailbox found in emulator memory. Either this is not a ' +
+        'co-op build of the ROM, or tools/patch-mgba.mjs has not been run ' +
+        'against the installed mgba-wasm.'
     );
+  }
+
+  adoptMailbox(buffer, offset) {
+    this.heapBuffer = buffer;
+    this.mailbox = new Mailbox(buffer, offset);
+    this.log(`mailbox found at heap offset 0x${offset.toString(16)}`);
+  }
+
+  /**
+   * Sample each candidate's heartbeat across several frames and return the one
+   * that is advancing. Returns null if it cannot be decided, so the caller can
+   * retry rather than commit to a dead buffer.
+   */
+  async resolveLiveMailbox(buffer, offsets, { rounds = 4, gapMs = 40 } = {}) {
+    const readings = [];
+
+    for (let r = 0; r < rounds; r++) {
+      const buf = this.core.coopHeapBuffer || buffer;
+      const view = new DataView(buf);
+      readings.push(offsets.map((off) => view.getUint16(off + 0x0e, true)));
+      if (r < rounds - 1) await new Promise((res) => setTimeout(res, gapMs));
+    }
+
+    return pickLiveMailbox(offsets, readings);
   }
 
   connect({ relayUrl, session, slot }) {

@@ -7,6 +7,7 @@ import {
   Mailbox,
   findMailbox,
   findAllMailboxes,
+  pickLiveMailbox,
   MAGIC,
   OFF,
   CMD_BYTES,
@@ -386,6 +387,7 @@ test('snapshot reports the state a diagnostics panel needs', () => {
     hostStatus: HOST_READY,
     localId: 1,
     playerCount: 2,
+    heartbeat: 0,
     outPending: 1,
     inPending: [1, 0],
   });
@@ -425,4 +427,88 @@ test('the struct size matches the C layout', () => {
   // in[] is the last member: MAX_PLAYERS * RING_SLOTS frames.
   assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, MAILBOX_SIZE);
   assert.equal(OFF.out + RING_SLOTS * CMD_BYTES, OFF.in, 'out[] abuts in[]');
+});
+
+// ---------------------------------------------------------------------------
+// telling the live mailbox from a snapshot
+// ---------------------------------------------------------------------------
+
+test('a single candidate needs no disambiguation', () => {
+  assert.equal(pickLiveMailbox([0x1000], []), 0x1000);
+});
+
+test('no candidates resolves to null', () => {
+  assert.equal(pickLiveMailbox([], [[]]), null);
+});
+
+test('the ticking candidate is chosen over a frozen snapshot', () => {
+  // An emulator holding a rewind snapshot presents two valid-looking
+  // mailboxes. Only the live one's heartbeat advances.
+  const offsets = [0x8e3d8, 0xbf33d8];
+  const rounds = [
+    [100, 4242],
+    [101, 4242],
+    [103, 4242],
+  ];
+  assert.equal(pickLiveMailbox(offsets, rounds), 0x8e3d8);
+});
+
+test('order does not matter — a later ticking candidate still wins', () => {
+  const rounds = [
+    [7, 50],
+    [7, 51],
+    [7, 53],
+  ];
+  assert.equal(pickLiveMailbox([0x2000, 0x9000], rounds), 0x9000);
+});
+
+test('a heartbeat that wraps past 16 bits still counts as ticking', () => {
+  // The counter is u16 and the ROM runs at 60fps, so it wraps about every 18
+  // minutes. "Changed" is the test, never "increased".
+  const rounds = [
+    [65534, 11],
+    [65535, 11],
+    [0, 11],
+    [1, 11],
+  ];
+  assert.equal(pickLiveMailbox([0xaaa, 0xbbb], rounds), 0xaaa);
+});
+
+test('nothing ticking resolves to null rather than guessing', () => {
+  // Emulator paused, or every candidate is a snapshot. Committing to a dead
+  // buffer would look connected and silently exchange nothing.
+  const rounds = [
+    [5, 9],
+    [5, 9],
+  ];
+  assert.equal(pickLiveMailbox([0x1000, 0x2000], rounds), null);
+});
+
+test('several ticking candidates resolve to null rather than guessing', () => {
+  const rounds = [
+    [1, 1],
+    [2, 2],
+  ];
+  assert.equal(pickLiveMailbox([0x1000, 0x2000], rounds), null);
+});
+
+test('one round of samples is not enough to decide', () => {
+  assert.equal(pickLiveMailbox([0x1000, 0x2000], [[5, 9]]), null);
+});
+
+test('the heartbeat is readable at the documented offset', () => {
+  const { buffer, offset } = makeHeap();
+  const host = new Mailbox(buffer, offset);
+  assert.equal(host.heartbeat, 0, 'starts zeroed');
+
+  // The ROM bumps this every VBlank; simulate one tick.
+  new DataView(buffer).setUint16(offset + OFF.heartbeat, 1234, true);
+  assert.equal(host.heartbeat, 1234);
+  assert.equal(host.snapshot().heartbeat, 1234);
+});
+
+test('the heartbeat occupies former padding, so the struct size is unchanged', () => {
+  assert.equal(OFF.heartbeat, 0x0e);
+  assert.equal(OFF.out, 0x10, 'out[] still starts at 0x10');
+  assert.equal(OFF.in + 2 * RING_SLOTS * CMD_BYTES, MAILBOX_SIZE);
 });

@@ -26,6 +26,7 @@ export const OFF = {
   outTail: 0x09,
   inHead: 0x0a, // [MAX_PLAYERS]
   inTail: 0x0c, // [MAX_PLAYERS]
+  heartbeat: 0x0e,
   out: 0x10, // NetFrame[RING_SLOTS]
   in: 0x90, // NetFrame[MAX_PLAYERS][RING_SLOTS]
 };
@@ -95,6 +96,40 @@ export function findAllMailboxes(buffer, range = {}) {
   return found;
 }
 
+/**
+ * Given several candidates, find the one the ROM is actually running in.
+ *
+ * An emulator may hold more than one copy of EWRAM -- rewind snapshots and
+ * save states both contain a full image, magic word and all. Picking wrongly
+ * means reading and writing a dead buffer: the session would look connected
+ * and simply never exchange anything.
+ *
+ * The live copy is the one whose heartbeat advances. `sample` is called with
+ * no arguments to read each candidate's heartbeat at a point in time; the
+ * caller is responsible for letting at least one frame elapse between rounds.
+ *
+ * @param {ArrayBuffer|SharedArrayBuffer} buffer
+ * @param {number[]} offsets candidate offsets
+ * @param {number[][]} rounds heartbeat readings, one array per round
+ * @returns {number|null} the live offset, or null if it cannot be decided
+ */
+export function pickLiveMailbox(offsets, rounds) {
+  if (offsets.length === 0) return null;
+  if (offsets.length === 1) return offsets[0];
+  if (rounds.length < 2) return null;
+
+  const moved = offsets.filter((_, i) => {
+    const first = rounds[0][i];
+    // A u16 wraps, so "changed at all" is the test, not "increased".
+    return rounds.some((r) => r[i] !== first);
+  });
+
+  // Exactly one ticking candidate is the answer. Zero means the emulator is
+  // paused or none of them are live; more than one means something is copying
+  // memory continuously and we should not guess.
+  return moved.length === 1 ? moved[0] : null;
+}
+
 export class Mailbox {
   /**
    * @param {ArrayBuffer|SharedArrayBuffer} buffer emulator heap
@@ -124,6 +159,15 @@ export class Mailbox {
   }
 
   // --- fields the host owns -------------------------------------------------
+
+  /**
+   * Ticks every emulated frame from boot. The only reliable way to tell the
+   * live mailbox from a rewind snapshot or save state, all of which carry a
+   * valid magic word.
+   */
+  get heartbeat() {
+    return this.view.getUint16(OFF.heartbeat, true);
+  }
 
   get hostStatus() {
     return this.view.getUint8(OFF.hostStatus);
@@ -243,6 +287,7 @@ export class Mailbox {
       hostStatus: this.hostStatus,
       localId: this.localId,
       playerCount: this.playerCount,
+      heartbeat: this.heartbeat,
       outPending: this.outPending,
       inPending: [this.inPending(0), this.inPending(1)],
     };

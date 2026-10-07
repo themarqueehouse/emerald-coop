@@ -76,7 +76,13 @@ struct NetMailbox
     /*0x0A*/ volatile u8 inHead[NET_MAX_PLAYERS];
     /*0x0C*/ volatile u8 inTail[NET_MAX_PLAYERS];
 
-    /*0x0E*/ u8 padding[2];
+    // Incremented every VBlank, unconditionally, from the moment the ROM
+    // boots. Its only job is to prove which copy of this struct is the live
+    // one: an emulator may hold several (rewind snapshots, save states), and
+    // all of them carry a valid-looking magic word. A snapshot's heartbeat is
+    // frozen; the live mailbox's ticks. Occupies what was padding, so the
+    // struct size is unchanged.
+    /*0x0E*/ volatile u16 heartbeat;
 
     /*0x10*/ struct NetFrame out[NET_RING_SLOTS];
     /*0x90*/ struct NetFrame in[NET_MAX_PLAYERS][NET_RING_SLOTS];

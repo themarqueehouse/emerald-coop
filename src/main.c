@@ -345,6 +345,11 @@ void SetSerialCallback(IntrCallback callback)
 
 static void VBlankIntr(void)
 {
+    // Proves to the host which copy of the mailbox is live. Runs every frame
+    // from boot, before and independently of any connection, because the host
+    // has to disambiguate candidates before it can set hostStatus at all.
+    gNetMailbox.heartbeat++;
+
     // In net mode there is no cable to clock and no adapter to service; the
     // wrapper drives the mailbox between frames instead.
     if (gNetLinkActive)
